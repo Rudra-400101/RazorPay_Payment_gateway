@@ -1,0 +1,100 @@
+
+
+<!-- C Sharp Code -->
+DataTable dt = db.ExecuteSelect("sp_Offers", new SqlParameter[] { new SqlParameter("@course", course_id), new SqlParameter("@email", User.Identity.Name), new SqlParameter("@action", 2) });
+if (dt.Rows.Count > 0)
+{
+    int totalamount = 0;
+    if (!dt.Rows[0]["email1"].Equals(DBNull.Value))
+    {
+        totalamount = Convert.ToInt32(dt.Rows[0]["finalfee"]) - Convert.ToInt32(dt.Rows[0]["DiscountAmount"]);
+    }
+    else
+    {
+     totalamount = Convert.ToInt32(dt.Rows[0]["fees"]) - Convert.ToInt32(dt.Rows[0]["discount"]);
+
+    }
+    var key = ConfigurationManager.AppSettings["KeyId"].ToString();
+    var secret = ConfigurationManager.AppSettings["SecretId"].ToString();
+    RazorpayClient client = new RazorpayClient(key, secret);
+    Dictionary<string, object> options = new Dictionary<string, object>();
+    options.Add("amount", Convert.ToDecimal(totalamount) * 100);
+    options.Add("currency", "INR");
+    Order order = client.Order.Create(options);
+    ViewBag.OrderId = order["id"].ToString();
+    return View(dt.Rows[0]);
+}
+
+<!-- JS Code -->
+<script>
+      //integrate payment gateway----------------------------------------------------------
+      let orderId = "@ViewBag.OrderId";  
+   let options = {
+       "name": "Code Helper",
+       "description": "@Html.Raw(Model["details"])",
+       "order_id": orderId,
+       "image": "https://localhost:44341/Content/assets/img/study-logo.png",
+       "prefill": {
+           "name":"@Model["name"]",
+           "email":"@Model["email"]",
+           "contact":"@Model["mobno"]",
+       },
+       "notes": {
+           "address": "@Model["college"]"
+       },
+       "theme": {
+           "color": "#3399cc"
+       }
+  }
+
+  // Boolean whether to show image inside a white frame. (default: true)
+      options.theme.image_padding = false;
+      options.handler = function (response) {
+          $.ajax({
+              url: "/home/ManagePayment",
+              type: "get",
+              data: { paymentId: response.razorpay_payment_id, orderId: orderId, signature: response.razorpay_signature },
+              responseType: "Json",
+              success: function (res) {
+                  swal("sucess", res, "success");
+                  $.ajax({
+                      url: "/home/AddEnrollStudent",
+                      type: "post",
+                      data: { "orderid": orderId, "courseId": @Request.QueryString["course_id"], "email": "@Model["email"]", "finalfee": $("#finalFee").text(), expiryDate: $("#expiryDate").text() },
+                      responseType: "Json",
+                      success: function (res) {
+                          swal("success", res, "success");
+                          setTimeout(() => {
+                              location.href = "/home/mycourse";
+
+                          },2000)
+                      },
+                      error: function () {
+                          swal("error", "Some Error Occured. Please try after sometime.", "error");
+                      }
+                  })
+              },
+              error: function () {
+                  swal("Sorry! Please wait", "Server down please try after some time", "error");
+              }
+          });
+      };
+      options.modal = {
+          ondismiss: function () {
+              console.log("This code runs when the popup is closed");
+          },
+          // Boolean indicating whether pressing escape key
+          // should close the checkout form. (default: true)
+          escape: true,
+          // Boolean indicating whether clicking translucent blank
+          // space outside checkout form should close the form. (default: false)
+          backdropclose: false
+      };
+      var rzp = new Razorpay(options);
+      $("#submitEnroll").click(function (e) {
+          rzp.open();
+          e.preventDefault();
+
+      });
+
+</script>
